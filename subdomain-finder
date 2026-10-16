@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Tool Name: sub-finder
+# Description: Interactive Bash subdomain enumerator using Certificate Transparency logs.
+# Usage: Just run 'sub-finder' and type the domain when prompted.
+# ==============================================================================
+
+echo "========================================"
+echo "          INTERACTIVE SUB-FINDER        "
+echo "========================================"
+read -p "Enter target domain (e.g., example.com): " DOMAIN
+
+if [[ -z "$DOMAIN" ]]; then
+    echo "[-] Error: No target domain provided."
+    exit 1
+fi
+
+echo -e "\n[*] Querying Certificate Transparency logs for: $DOMAIN..."
+echo "--------------------------------------------------"
+
+# Fetch JSON data from crt.sh API
+URL="https://crt.sh/?q=%25.$DOMAIN&output=json"
+response=$(curl -s "$URL")
+
+if [[ -z "$response" ]] || [[ "$response" == "[]" ]]; then
+    echo "[-] No subdomains found or unable to reach the API."
+    exit 0
+fi
+
+# Parse and filter unique subdomains using Python 3
+echo "$response" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    subdomains = set()
+    for entry in data:
+        name_value = entry.get('name_value', '')
+        for sub in name_value.split('\n'):
+            sub = sub.strip().lower()
+            if sub and '*' not in sub:
+                subdomains.add(sub)
+    for sub in sorted(subdomains):
+        print(sub)
+except Exception as e:
+    sys.stderr.write(f'[-] Parsing error: {e}\n')
+"
+
+echo "--------------------------------------------------"
+echo "[*] Subdomain scan complete."
